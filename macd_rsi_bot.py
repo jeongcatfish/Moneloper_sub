@@ -10,14 +10,26 @@ from binance_f.base.printobject import *
 from time import sleep
 from datetime import datetime
 from keys import keys
+from PyQt5.QtWidgets import *
+from PyQt5 import uic
+import sys
 
-class bot:
+form_class = uic.loadUiType("priceUI.ui")[0]
+
+class bot(QMainWindow, form_class):
     def __init__(self):
+        super().__init__()
+        self.setupUi(self)
+
         self. keys = keys()
         self.request_client = RequestClient(api_key=self.keys.get_key(), secret_key=self.keys.get_secret_key())
         self.init_variable()
         self.main()
 
+    def update_UI(self):
+        while True:
+            sleep(1)
+            self.label.setText(str(self.now_price))
     def init_variable(self):
         self.macd_golden_cross = False
         self.macd_dead_corss = False
@@ -26,21 +38,21 @@ class bot:
         self.rsi_over_top = False
         self.rsi_over_bottom = False
         self.current_position = "none"
-        #self.atr_over_bottom = False
-        #self.atr_toucH_middle = False #atr이 bitcoin에서 좋은모습을 보이지 못하고 rsi로 충분히 대처가 가능할 것 같다 일단 빼자..
 
         self.dead_line_value = 0 # 이 값에 닿으면 손절한다.
         self.dead_line_percent = 0.007 # 코인 가격이 구매 했을 때 가격보다 2%차이가 나면 손절
         self.purchased_price = 0 # 구입 가격
         self.cut = False #지지선 넘는 신호
 
+
     def main(self):
         #self.post_order("BUY")
-        self.memo_trading("trading test for memo")
-        update_15m = threading.Thread(target=self.update_candle_stick_15m)
-        trading = threading.Thread(target=self.thread_trading)
-        update_15m.start()
-        trading.start()
+        update_15m_thr = threading.Thread(target=self.update_candle_stick_15m)
+        trading_thr = threading.Thread(target=self.thread_trading)
+        update_UI_thr = threading.Thread(target = self.update_UI)
+        update_15m_thr.start()
+        trading_thr.start()
+        update_UI_thr.start()
     def thread_trading(self):
         while True:
             if self.cut == True: # 어떤 포지션이든 손절
@@ -48,7 +60,6 @@ class bot:
                 print(f'[lose] purchased price : {self.purchased_price} price : {self.now_price}')
                 self.current_position = "none"
                 self.purchased_price = 0
-
             if self.current_position == "none": #포지션이 없을 때
                 if self.macd_golden_cross: #롱 매수
                     self.purchased_price = self.now_price
@@ -82,6 +93,7 @@ class bot:
 
     #1초에 한 번 15분봉 데이터를 불러옴
     def update_candle_stick_15m(self):
+        global bit_price
         while True:
             try:
                 self.candle_stick_list = self.request_client.get_candlestick_data(symbol="BTCUSDT",
@@ -94,9 +106,8 @@ class bot:
                     trash_Arr.append(float(stick.close))
                 self.candle_stick_15m_np_array = np.array(trash_Arr, dtype='f8')
                 self.now_price = float(self.candle_stick_list[-1].close)
-
-                self.check_macd_signal() #macd 시그널 확인
-                self.check_rsi_signal() #rsi 시그널 확인
+                self.check_macd_signal()  # macd 시그널 확인
+                self.check_rsi_signal()  # rsi 시그널 확인
             except Exception as e:
                 print(f'에러 : {e}')
             sleep(1)
@@ -170,6 +181,10 @@ class bot:
         f = open("C:/Users/admin/Documents/trading_test.txt", 'a')
         f.write(f'{data}\n')
         f.close()
-if __name__ == "__main__" :
-    my_bot = bot()
 
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    myWindow = bot()
+    myWindow.show()
+    app.exec_()
